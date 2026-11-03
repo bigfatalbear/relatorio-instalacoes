@@ -1,7 +1,7 @@
 {
-  "name": "Relatório de Instalações",
-  "short_name": "Relatórios",
-  "description": "Controle de instalações e câmeras com relatórios semanais, mensais e sob demanda. Compartilhe por WhatsApp ou e-mail.",
+  "name": "I.S.P Telecom",
+  "short_name": "I.S.P Telecom",
+  "description": "I.S.P Telecom — controle de instalações e câmeras com relatórios semanais, mensais e sob demanda. Compartilhe por WhatsApp ou e-mail.",
   "lang": "pt-BR",
   "dir": "ltr",
   "start_url": "./",

@@ -508,7 +508,7 @@ function renderReport(report) {
 
   els.reportOutput.innerHTML = `
     <div class="report__head">
-      <span class="report__company">${esc(report.settings.company || 'Relatório de Instalações')}</span>
+      <span class="report__company">${esc(report.settings.company || 'I.S.P Telecom')}</span>
       <h2 class="report__title">${esc(report.typeLabel)}</h2>
       <span class="report__period">${report.periodText}</span>
     </div>
@@ -666,7 +666,7 @@ function onExportBackup() {
     settings: state.settings,
     updatedAt: state.meta.updatedAt,
   });
-  downloadFile(`backup-relatorios-${todayISO()}.json`, JSON.stringify(payload, null, 2), 'application/json');
+  downloadFile(`backup-isp-telecom-${todayISO()}.json`, JSON.stringify(payload, null, 2), 'application/json');
   toast('Backup gerado.');
 }
 
@@ -677,14 +677,14 @@ async function onShareBackup() {
     updatedAt: state.meta.updatedAt,
   });
   const text = JSON.stringify(payload, null, 2);
-  const filename = `backup-relatorios-${todayISO()}.json`;
+  const filename = `backup-isp-telecom-${todayISO()}.json`;
   const file = new File([text], filename, { type: 'application/json' });
 
   if (navigator.canShare?.({ files: [file] })) {
     try {
       await navigator.share({
         files: [file],
-        title: 'Backup — Relatório de Instalações',
+        title: 'Backup — I.S.P Telecom',
         text: 'Backup dos dados do app.',
       });
       return;

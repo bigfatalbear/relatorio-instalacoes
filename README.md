@@ -1,8 +1,8 @@
-# Relatório de Instalações (PWA)
+# I.S.P Telecom (PWA)
 
 **App online:** https://bigfatalbear.github.io/relatorio-instalacoes/
 
-App instalável para registrar instalações de internet e câmeras, gerar **relatórios semanais, mensais e sob demanda** e compartilhar por **WhatsApp**, **e-mail**, texto ou CSV.
+App instalável da **I.S.P Telecom** para registrar instalações de internet e câmeras, gerar **relatórios semanais, mensais e sob demanda** e compartilhar por **WhatsApp**, **e-mail**, texto ou CSV.
 
 Baseado na planilha `rolatorio.xlsx`: colunas DATA, SEMANA, ID, CLIENTES, INSTALAÇÃO (R$ 120), CÂMERA (R$ 50), QTD.INSTALAÇÃO e QTD.CÂMERA.
 

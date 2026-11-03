@@ -6,7 +6,7 @@ export const KEYS = {
 };
 
 export const DEFAULT_SETTINGS = {
-  company: 'Relatório de Instalações',
+  company: 'I.S.P Telecom',
   installUnit: 120,
   cameraUnit: 50,
   footer: '',
@@ -34,7 +34,10 @@ export function loadSettings() {
   try {
     const raw = localStorage.getItem(KEYS.settings);
     if (!raw) return { ...DEFAULT_SETTINGS };
-    return normalizeSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(raw) });
+    const settings = normalizeSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(raw) });
+    // migra o nome antigo (versões anteriores do app) para a marca atual
+    if (settings.company === 'Relatório de Instalações') settings.company = DEFAULT_SETTINGS.company;
+    return settings;
   } catch {
     return { ...DEFAULT_SETTINGS };
   }
