@@ -1,5 +1,7 @@
 # Relatório de Instalações (PWA)
 
+**App online:** https://bigfatalbear.github.io/relatorio-instalacoes/
+
 App instalável para registrar instalações de internet e câmeras, gerar **relatórios semanais, mensais e sob demanda** e compartilhar por **WhatsApp**, **e-mail**, texto ou CSV.
 
 Baseado na planilha `rolatorio.xlsx`: colunas DATA, SEMANA, ID, CLIENTES, INSTALAÇÃO (R$ 120), CÂMERA (R$ 50), QTD.INSTALAÇÃO e QTD.CÂMERA.
@@ -66,6 +68,8 @@ gh api -X POST repos/{owner}/relatorio-instalacoes/pages \
 ```
 
 URL: `https://{owner}.github.io/relatorio-instalacoes/`
+
+> Ao alterar arquivos, incremente `CACHE` no topo de `sw.js` (ex.: `ri-v2`) para forçar a atualização nos aparelhos que já instalaram o app.
 
 ## Estrutura
 
