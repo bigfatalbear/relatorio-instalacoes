@@ -20,7 +20,8 @@ Baseado na planilha `rolatorio.xlsx`: colunas DATA, SEMANA, ID, CLIENTES, INSTAL
   - Compartilhamento nativo do Android (Web Share API);
   - Copiar texto, baixar **CSV** e **imprimir/salvar PDF**.
 - **Importar planilha** `.xlsx`, `.xls` ou `.csv` (detecta cabeçalhos e datas).
-- **Backup** em JSON e restauração.
+- **Backup** em JSON, restauração e **compartilhamento do arquivo** (Drive, WhatsApp, e-mail…).
+- **Login com Google** e **sincronização automática** com o Google Drive (pasta privada do app).
 - **PWA**: funciona offline, instala na tela inicial, abre em tela cheia.
 
 ## Privacidade
@@ -43,6 +44,45 @@ Em **Ajustes → Importar planilha**, selecione o `.xlsx`. O app lê todas as ab
 
 - **OK** → adiciona aos existentes (duplicados são ignorados);
 - **Cancelar** → substitui tudo pelos dados da planilha.
+
+## Google Drive (login e sincronização)
+
+O app entra com a **sua** conta Google e guarda um `relatorio-instalacoes-backup.json` na pasta privada do app no Drive (escopo `drive.appdata`). O arquivo **não aparece** na lista normal do Drive e nenhum outro app consegue lê-lo.
+
+### Configuração única (10 min, gratuita)
+
+1. Abra <https://console.cloud.google.com> e crie um projeto (ex.: `Relatorio Instalacoes`).
+2. **APIs e serviços → Biblioteca** → ative **Google Drive API**.
+3. **APIs e serviços → Tela de consentimento OAuth**:
+   - Tipo: **Externo**;
+   - Preencha nome do app e e-mail de suporte;
+   - Em **Usuários de teste**, adicione o seu e-mail;
+   - Salve.
+4. **APIs e serviços → Credenciais → Criar credenciais → ID do cliente OAuth**:
+   - Tipo: **Aplicativo da Web**;
+   - **Origens JavaScript autorizadas**: `https://bigfatalbear.github.io`
+     (sem caminho, sem barra no final);
+   - Criar.
+5. Copie o **Client ID** (termina em `.apps.googleusercontent.com`).
+6. No app: **Ajustes → Google Drive**, cole o Client ID e toque em **Entrar com Google**.
+7. Autorize o acesso e toque em **Sincronizar agora**.
+
+> O Client ID é público (não é segredo). Não é necessário Client Secret nem URL de redirecionamento.
+> Enquanto o app estiver em modo **Testing** no Google Cloud, só os e-mails cadastrados como testadores conseguem entrar.
+
+### Como a sincronização funciona
+
+- **Manual:** botões *Sincronizar agora* e *Restaurar do Drive*.
+- **Automática:** ao salvar qualquer lançamento/ajuste, o app envia o backup após ~5 s (se a opção estiver marcada).
+- **Conflitos:** se o arquivo no Drive estiver mais recente, o app pergunta antes de sobrescrever (OK restaura, Cancelar envia o local).
+- O login vale ~1 hora por sessão; depois o app tenta renovar sozinho ou pede um toque em *Entrar com Google*.
+- Offline: as alterações ficam no aparelho e são enviadas quando a conexão volta.
+
+### Limitações
+
+- É necessário criar o Client ID na sua conta Google (não há como embutir um segredo no site estático).
+- Para distribuir o app para muitas pessoas fora dos testadores, o Google pode exigir verificação do OAuth.
+- A exclusão do backup no Drive não apaga os dados locais (e vice-versa).
 
 ## Desenvolvimento local
 
@@ -81,6 +121,7 @@ js/db.js              # localStorage, datas e valores
 js/reports.js         # agregação, texto e CSV dos relatórios
 js/share.js           # WhatsApp, e-mail, share nativo, download
 js/import.js          # leitura de xlsx/xls/csv
+js/drive.js           # login Google e sincronização com o Drive
 sw.js                 # cache offline
 manifest.webmanifest  # instalação PWA
 vendor/xlsx.full.min.js

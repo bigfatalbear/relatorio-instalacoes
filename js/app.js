@@ -1,5 +1,5 @@
 import {
-  addDays, currency, currentMonthISO, DEFAULT_SETTINGS, endOfMonth, formatDateBR, formatMonthBR,
+  addDays, currency, currentMonthISO, DEFAULT_SETTINGS, endOfMonth, formatDateBR,
   isValidRecord, lastMonthISO, loadRecords, loadSettings, makeRecord, numberBR, recordTotals,
   saveRecords, saveSettings, startOfMonth, startOfWeek, todayISO, toNumber, weekdayShort,
   weekInputValue, weekStartFromInput,
@@ -11,9 +11,17 @@ import {
   copyText, downloadFile, shareEmail, shareNative, shareWhatsApp,
 } from './share.js';
 import { importSpreadsheet } from './import.js';
+import {
+  buildPayload, connect as googleConnect, downloadBackup, findBackupFile, getUserInfo,
+  isCloudNewer, preloadGis, revoke, uploadBackup,
+} from './drive.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+
+const DRIVE_KEY = 'ri.drive.v1';
+const META_KEY = 'ri.meta.v1';
+const AUTO_SYNC_DELAY = 5000;
 
 const state = {
   records: [],
@@ -24,6 +32,14 @@ const state = {
   periodType: 'week',
   lastReport: null,
   deferredInstall: null,
+  drive: {
+    clientId: '', linked: false, email: '', autoSync: false, lastSyncAt: null,
+  },
+  meta: { updatedAt: null, lastSyncAt: null, fileId: null },
+  driveToken: null,
+  syncing: false,
+  driveNotice: '',
+  autoSyncTimer: null,
 };
 
 const els = {};
@@ -34,6 +50,13 @@ function init() {
   cacheElements();
   state.records = loadRecords();
   state.settings = loadSettings();
+  state.drive = loadDriveState();
+  state.meta = loadMeta();
+
+  if (state.records.length && !state.meta.updatedAt) {
+    state.meta.updatedAt = new Date().toISOString();
+    saveMeta();
+  }
 
   state.filterMonth = pickInitialMonth();
 
@@ -44,6 +67,8 @@ function init() {
   renderAll();
   registerServiceWorker();
   setupInstallPrompt();
+
+  if (state.drive.clientId) preloadGis();
 }
 
 function cacheElements() {
@@ -91,6 +116,17 @@ function cacheElements() {
   els.restoreFile = $('#restore-file');
   els.toast = $('#toast');
   els.installBtn = $('#btn-install');
+  els.shareBackup = $('#btn-share-backup');
+
+  els.driveClient = $('#drive-client');
+  els.driveStatus = $('#drive-status');
+  els.driveEmail = $('#drive-email');
+  els.driveAuto = $('#drive-auto');
+  els.driveAutoWrap = $('#drive-auto-wrap');
+  els.btnDriveConnect = $('#btn-drive-connect');
+  els.btnDriveSync = $('#btn-drive-sync');
+  els.btnDriveRestore = $('#btn-drive-restore');
+  els.btnDriveDisconnect = $('#btn-drive-disconnect');
 }
 
 /* ---------------- inicialização ---------------- */
@@ -158,17 +194,33 @@ function bindEvents() {
   $$('#report-actions [data-share]').forEach((btn) => {
     btn.addEventListener('click', () => onShare(btn.dataset.share));
   });
-
-  els.settingsForm.addEventListener('submit', onSaveSettings);
   els.reportClients.addEventListener('change', () => {
     if (state.lastReport) renderReport(state.lastReport);
   });
+
+  els.settingsForm.addEventListener('submit', onSaveSettings);
   els.importFile.addEventListener('change', onImportFile);
   els.restoreFile.addEventListener('change', onRestoreFile);
   $('#btn-export').addEventListener('click', onExportBackup);
+  els.shareBackup.addEventListener('click', onShareBackup);
   $('#btn-clear').addEventListener('click', onClearData);
 
-  window.addEventListener('online', () => toast('Conexão restabelecida.'));
+  els.btnDriveConnect.addEventListener('click', onDriveConnect);
+  els.btnDriveSync.addEventListener('click', () => syncNow({ auto: false }));
+  els.btnDriveRestore.addEventListener('click', onDriveRestore);
+  els.btnDriveDisconnect.addEventListener('click', onDriveDisconnect);
+  els.driveAuto.addEventListener('change', () => {
+    state.drive.autoSync = els.driveAuto.checked;
+    saveDriveState();
+    if (state.drive.autoSync && !state.drive.linked) {
+      toast('Entre com o Google para ativar a sincronização automática.');
+    }
+  });
+
+  window.addEventListener('online', () => {
+    toast('Conexão restabelecida.');
+    if (state.drive.autoSync && state.drive.linked) scheduleAutoSync(500);
+  });
   window.addEventListener('offline', () => toast('Você está offline — o app continua funcionando.'));
 }
 
@@ -337,9 +389,10 @@ function renderKpis() {
   els.kpiTotal.textContent = currency(total);
 }
 
-function persistRecords() {
+function persistRecords({ touch = true } = {}) {
   state.records.sort((a, b) => a.date.localeCompare(b.date));
   saveRecords(state.records);
+  if (touch) touchData();
 }
 
 /* ---------------- relatórios ---------------- */
@@ -548,6 +601,7 @@ function onSaveSettings(event) {
   };
   state.settings = settings;
   saveSettings(settings);
+  touchData();
   els.brandName.textContent = settings.company;
   if (!state.editingId) {
     els.installUnit.value = settings.installUnit;
@@ -607,15 +661,40 @@ async function onImportFile(event) {
 }
 
 function onExportBackup() {
-  const payload = {
-    app: 'relatorio-instalacoes',
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    settings: state.settings,
+  const payload = buildPayload({
     records: state.records,
-  };
+    settings: state.settings,
+    updatedAt: state.meta.updatedAt,
+  });
   downloadFile(`backup-relatorios-${todayISO()}.json`, JSON.stringify(payload, null, 2), 'application/json');
   toast('Backup gerado.');
+}
+
+async function onShareBackup() {
+  const payload = buildPayload({
+    records: state.records,
+    settings: state.settings,
+    updatedAt: state.meta.updatedAt,
+  });
+  const text = JSON.stringify(payload, null, 2);
+  const filename = `backup-relatorios-${todayISO()}.json`;
+  const file = new File([text], filename, { type: 'application/json' });
+
+  if (navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({
+        files: [file],
+        title: 'Backup — Relatório de Instalações',
+        text: 'Backup dos dados do app.',
+      });
+      return;
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+    }
+  }
+
+  downloadFile(filename, text, 'application/json');
+  toast('Compartilhamento indisponível neste navegador — backup baixado.');
 }
 
 async function onRestoreFile(event) {
@@ -654,7 +733,7 @@ function onClearData() {
   const ok = window.confirm('Apagar TODOS os lançamentos deste aparelho? Essa ação não pode ser desfeita.');
   if (!ok) return;
   state.records = [];
-  saveRecords([]);
+  persistRecords();
   state.lastReport = null;
   els.reportOutput.hidden = true;
   els.reportActions.hidden = true;
@@ -669,6 +748,279 @@ function renderStorageInfo() {
   els.storageInfo.textContent = `${numberBR(records)} lançamento(s) salvos · ${(bytes / 1024).toFixed(1)} KB · armazenamento local do navegador.`;
 }
 
+/* ---------------- Google Drive ---------------- */
+
+function loadDriveState() {
+  const base = { clientId: '', linked: false, email: '', autoSync: false, lastSyncAt: null };
+  try {
+    return { ...base, ...JSON.parse(localStorage.getItem(DRIVE_KEY) || '{}') };
+  } catch {
+    return base;
+  }
+}
+
+function saveDriveState() {
+  localStorage.setItem(DRIVE_KEY, JSON.stringify(state.drive));
+}
+
+function loadMeta() {
+  const base = { updatedAt: null, lastSyncAt: null, fileId: null };
+  try {
+    return { ...base, ...JSON.parse(localStorage.getItem(META_KEY) || '{}') };
+  } catch {
+    return base;
+  }
+}
+
+function saveMeta() {
+  localStorage.setItem(META_KEY, JSON.stringify(state.meta));
+}
+
+function touchData() {
+  state.meta.updatedAt = new Date().toISOString();
+  saveMeta();
+  scheduleAutoSync();
+}
+
+function renderDrive() {
+  const d = state.drive;
+  els.driveClient.value = d.clientId || els.driveClient.value || '';
+
+  els.driveEmail.hidden = !d.linked;
+  els.driveEmail.textContent = d.linked ? `Conectado como ${d.email || 'sua conta Google'}` : '';
+  els.driveEmail.classList.toggle('pill--ok', Boolean(d.linked));
+
+  if (state.syncing) {
+    els.driveStatus.textContent = 'Sincronizando com o Google Drive…';
+  } else if (state.driveNotice) {
+    els.driveStatus.textContent = state.driveNotice;
+  } else if (d.linked && d.lastSyncAt) {
+    els.driveStatus.textContent = `Última sincronização: ${new Date(d.lastSyncAt).toLocaleString('pt-BR')}`;
+  } else if (d.linked) {
+    els.driveStatus.textContent = 'Conta conectada. Toque em "Sincronizar agora".';
+  } else {
+    els.driveStatus.textContent = 'Nenhuma conta conectada.';
+  }
+
+  els.btnDriveConnect.hidden = d.linked;
+  els.btnDriveSync.hidden = !d.linked;
+  els.btnDriveRestore.hidden = !d.linked;
+  els.btnDriveDisconnect.hidden = !d.linked;
+  els.driveAutoWrap.hidden = !d.linked;
+  els.driveAuto.checked = Boolean(d.autoSync);
+
+  const busy = state.syncing;
+  [els.btnDriveConnect, els.btnDriveSync, els.btnDriveRestore, els.btnDriveDisconnect]
+    .forEach((btn) => { btn.disabled = busy; });
+}
+
+function setSyncing(value) {
+  state.syncing = value;
+  renderDrive();
+}
+
+async function ensureDriveToken({ clientId, force = false } = {}) {
+  if (!force && state.driveToken && state.driveToken.expiresAt > Date.now() + 30000) {
+    return state.driveToken;
+  }
+
+  const id = (clientId || els.driveClient.value || state.drive.clientId || '').trim();
+  if (!id) throw new Error('Informe o Client ID do Google em Ajustes.');
+  if (!/^[\w-]+\.apps\.googleusercontent\.com$/.test(id)) {
+    throw new Error('Client ID inválido. Ele termina com ".apps.googleusercontent.com".');
+  }
+
+  const token = await googleConnect(id);
+  state.driveToken = token;
+  state.drive.clientId = id;
+  saveDriveState();
+  return token;
+}
+
+async function onDriveConnect() {
+  if (state.syncing) return;
+  setSyncing(true);
+  state.driveNotice = '';
+  try {
+    const token = await ensureDriveToken({ force: true });
+    const info = await getUserInfo(token.accessToken);
+    state.drive = {
+      ...state.drive,
+      linked: true,
+      email: info?.email || 'sua conta Google',
+      autoSync: state.drive.autoSync,
+    };
+    saveDriveState();
+    renderDrive();
+    toast('Conectado ao Google Drive. Toque em "Sincronizar agora".');
+  } catch (err) {
+    handleDriveError(err);
+  } finally {
+    setSyncing(false);
+  }
+}
+
+async function syncNow({ auto = false } = {}) {
+  if (state.syncing) return;
+  if (!auto) state.driveNotice = '';
+  setSyncing(true);
+
+  try {
+    const token = await ensureDriveToken();
+    const file = await findBackupFile(token.accessToken);
+    if (file) {
+      state.meta.fileId = file.id;
+      saveMeta();
+    }
+    let cloud = null;
+    if (file) cloud = await downloadBackup(token.accessToken, file.id);
+
+    const cloudIsNewer = cloud && isCloudNewer(cloud.updatedAt, state.meta.updatedAt);
+
+    if (cloudIsNewer && !auto) {
+      const stamp = cloud.updatedAt
+        ? new Date(cloud.updatedAt).toLocaleString('pt-BR')
+        : 'data desconhecida';
+      const restore = window.confirm(
+        `A nuvem tem dados mais recentes (${stamp}).\n\n`
+        + 'OK = restaurar do Drive\nCancelar = enviar deste aparelho',
+      );
+      if (restore) {
+        applyCloud(cloud);
+        return;
+      }
+    }
+
+    if (cloudIsNewer && auto) {
+      state.driveNotice = 'A nuvem está mais recente. Use "Restaurar do Drive" para baixar.';
+      return;
+    }
+
+    await pushToDrive(token, file);
+    if (!auto) toast('Dados sincronizados com o Google Drive.');
+  } catch (err) {
+    if (auto) handleAutoSyncError(err);
+    else handleDriveError(err);
+  } finally {
+    setSyncing(false);
+  }
+}
+
+async function pushToDrive(token, file) {
+  const payload = buildPayload({
+    records: state.records,
+    settings: state.settings,
+    updatedAt: state.meta.updatedAt || new Date().toISOString(),
+  });
+
+  const saved = await uploadBackup(token.accessToken, file?.id || state.meta.fileId || null, payload);
+  const now = new Date().toISOString();
+  state.meta.fileId = saved.id;
+  state.meta.lastSyncAt = now;
+  saveMeta();
+  state.drive.lastSyncAt = now;
+  saveDriveState();
+  state.driveNotice = '';
+  renderDrive();
+}
+
+async function onDriveRestore() {
+  if (state.syncing) return;
+  setSyncing(true);
+  state.driveNotice = '';
+  try {
+    const token = await ensureDriveToken();
+    const file = await findBackupFile(token.accessToken);
+    if (!file) {
+      toast('Nenhum backup no Google Drive ainda. Sincronize primeiro.');
+      return;
+    }
+    const cloud = await downloadBackup(token.accessToken, file.id);
+    state.meta.fileId = file.id;
+    saveMeta();
+    const ok = window.confirm(
+      `Restaurar ${cloud.records.length} lançamento(s) do Google Drive?\n`
+      + 'Os dados deste aparelho serão substituídos.',
+    );
+    if (!ok) return;
+    applyCloud(cloud);
+  } catch (err) {
+    handleDriveError(err);
+  } finally {
+    setSyncing(false);
+  }
+}
+
+function applyCloud(cloud) {
+  state.records = cloud.records
+    .filter(isValidRecord)
+    .map((r) => makeRecord(r, state.settings));
+
+  saveRecords(state.records);
+
+  if (cloud.settings && typeof cloud.settings === 'object') {
+    state.settings = { ...state.settings, ...cloud.settings };
+    saveSettings(state.settings);
+    fillSettingsForm();
+  }
+
+  state.meta.updatedAt = cloud.updatedAt || new Date().toISOString();
+  state.meta.lastSyncAt = new Date().toISOString();
+  saveMeta();
+
+  state.drive.linked = true;
+  state.drive.lastSyncAt = state.meta.lastSyncAt;
+  saveDriveState();
+
+  state.filterMonth = pickInitialMonth();
+  els.filterMonth.value = state.filterMonth;
+  renderAll();
+  setReportDefaults();
+  toast(`Dados restaurados do Google Drive (${numberBR(state.records.length)} lançamentos).`);
+}
+
+function onDriveDisconnect() {
+  const ok = window.confirm('Desconectar a conta Google? Os dados continuam salvos neste aparelho.');
+  if (!ok) return;
+
+  revoke(state.driveToken?.accessToken);
+  state.driveToken = null;
+  state.drive = { ...state.drive, linked: false, email: '', autoSync: false };
+  saveDriveState();
+  state.driveNotice = '';
+  renderDrive();
+  toast('Conta Google desconectada.');
+}
+
+function scheduleAutoSync(delay = AUTO_SYNC_DELAY) {
+  if (!state.drive.autoSync || !state.drive.linked) return;
+  clearTimeout(state.autoSyncTimer);
+  state.autoSyncTimer = setTimeout(() => {
+    if (!navigator.onLine) return;
+    if (!state.driveToken || state.driveToken.expiresAt <= Date.now()) return;
+    syncNow({ auto: true });
+  }, delay);
+}
+
+function handleDriveError(err) {
+  console.warn('Google Drive:', err);
+  if (err?.code === 'AUTH') state.driveToken = null;
+  const message = err?.message || 'Falha ao acessar o Google Drive.';
+  if (/popup_closed|cancelad/i.test(message)) {
+    toast('Login cancelado.');
+  } else {
+    toast(message);
+  }
+  renderDrive();
+}
+
+function handleAutoSyncError(err) {
+  console.warn('Auto-sync:', err);
+  if (err?.code === 'AUTH') state.driveToken = null;
+  state.driveNotice = 'Sincronização automática pendente. Toque em "Sincronizar agora".';
+  renderDrive();
+}
+
 /* ---------------- utilidades ---------------- */
 
 function renderAll() {
@@ -676,6 +1028,7 @@ function renderAll() {
   renderKpis();
   renderRecords();
   renderStorageInfo();
+  renderDrive();
 }
 
 function toast(message, ms = 3000) {

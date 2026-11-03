@@ -1,5 +1,5 @@
 /* Service worker — cache offline do app. */
-const CACHE = 'ri-v1';
+const CACHE = 'ri-v2';
 
 const ASSETS = [
   './',
@@ -10,6 +10,7 @@ const ASSETS = [
   './js/reports.js',
   './js/share.js',
   './js/import.js',
+  './js/drive.js',
   './vendor/xlsx.full.min.js',
   './manifest.webmanifest',
   './icons/favicon.svg',

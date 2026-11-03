@@ -226,6 +226,48 @@
         </div>
       </form>
 
+      <div class="card" id="drive-card">
+        <div class="card__head">
+          <h2>Google Drive</h2>
+          <span class="hint">Entre com sua conta Google para salvar e sincronizar os dados no seu Drive.</span>
+        </div>
+
+        <div class="cloud-status">
+          <span class="pill" id="drive-email" hidden></span>
+          <span class="hint" id="drive-status">Nenhuma conta conectada.</span>
+        </div>
+
+        <div class="field">
+          <label for="drive-client">Client ID do Google (OAuth)</label>
+          <input type="text" id="drive-client" spellcheck="false" autocomplete="off" placeholder="000000000000-xxxxxxxx.apps.googleusercontent.com">
+        </div>
+        <p class="hint">
+          Crie um OAuth Client ID (Web) no Google Cloud com a origem
+          <code>https://bigfatalbear.github.io</code>. Passo a passo no
+          <a href="https://github.com/bigfatalbear/relatorio-instalacoes#google-drive" target="_blank" rel="noopener">README</a>.
+        </p>
+
+        <div class="data-actions">
+          <button type="button" class="btn btn--primary" id="btn-drive-connect">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            Entrar com Google
+          </button>
+          <button type="button" class="btn btn--ghost" id="btn-drive-sync" hidden>Sincronizar agora</button>
+          <button type="button" class="btn btn--ghost" id="btn-drive-restore" hidden>Restaurar do Drive</button>
+          <button type="button" class="btn btn--ghost" id="btn-drive-disconnect" hidden>Desconectar</button>
+        </div>
+
+        <label class="check" id="drive-auto-wrap" hidden>
+          <input type="checkbox" id="drive-auto">
+          <span>Sincronizar automaticamente ao salvar (a cada alteração)</span>
+        </label>
+
+        <p class="hint">
+          O backup fica na pasta privada do app no Google Drive. Só este app consegue acessá-lo —
+          ele não aparece na lista normal de arquivos.
+        </p>
+      </div>
+
       <div class="card">
         <div class="card__head">
           <h2>Dados</h2>
@@ -239,6 +281,7 @@
           <input type="file" id="import-file" accept=".xlsx,.xls,.csv" hidden>
 
           <button type="button" class="btn btn--ghost" id="btn-export">Baixar backup (.json)</button>
+          <button type="button" class="btn btn--ghost" id="btn-share-backup">Compartilhar backup</button>
           <label class="btn btn--ghost btn--file" for="restore-file">Restaurar backup</label>
           <input type="file" id="restore-file" accept=".json,application/json" hidden>
 
@@ -253,6 +296,7 @@
           PWA instalável, funciona offline e pode ser aberto direto do link do GitHub Pages.
           Relatórios semanais (segunda a domingo), mensais e por período personalizado.
           Compartilhamento por WhatsApp, e-mail, texto copiado ou arquivo CSV.
+          Backup manual em JSON ou sincronização automática com o Google Drive.
         </p>
         <p class="hint">Versão 1.0.0</p>
       </div>
