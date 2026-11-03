@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Relatório de Instalações</title>
+  <meta name="description" content="Controle de instalações e câmeras com relatórios semanais, mensais e sob demanda. Compartilhe por WhatsApp ou e-mail.">
+  <meta name="theme-color" content="#1d4ed8">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Relatórios">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icons/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
+  <link rel="stylesheet" href="./css/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#conteudo">Ir para o conteúdo</a>
+
+  <header class="app-header">
+    <div class="app-header__inner">
+      <div class="brand">
+        <img class="brand__logo" src="./icons/icon-192.png" alt="" width="40" height="40">
+        <div class="brand__text">
+          <strong id="brand-name">Relatório de Instalações</strong>
+          <span>Controle de instalações e câmeras</span>
+        </div>
+      </div>
+      <button id="btn-install" class="btn btn--ghost btn--sm" type="button" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Instalar app
+      </button>
+    </div>
+  </header>
+
+  <main id="conteudo" class="app-main">
+    <!-- ================= LANÇAMENTOS ================= -->
+    <section id="tab-lancamentos" class="tab-panel" role="tabpanel" aria-label="Lançamentos">
+      <div class="kpi-grid" id="month-kpis">
+        <div class="kpi"><span class="kpi__label">Instalações</span><strong class="kpi__value" id="kpi-install">0</strong></div>
+        <div class="kpi"><span class="kpi__label">Câmeras</span><strong class="kpi__value" id="kpi-camera">0</strong></div>
+        <div class="kpi kpi--money"><span class="kpi__label">Total do mês</span><strong class="kpi__value" id="kpi-total">R$ 0,00</strong></div>
+      </div>
+
+      <form id="record-form" class="card" autocomplete="off">
+        <div class="card__head">
+          <h2 id="form-title">Novo lançamento</h2>
+          <span class="hint" id="form-hint">Preencha e salve. Tudo fica salvo neste aparelho.</span>
+        </div>
+        <input type="hidden" id="record-id">
+
+        <div class="form-grid">
+          <div class="field">
+            <label for="f-date">Data *</label>
+            <input type="date" id="f-date" required>
+          </div>
+          <div class="field">
+            <label for="f-client-id">ID do cliente</label>
+            <input type="number" id="f-client-id" inputmode="numeric" placeholder="Ex.: 6062">
+          </div>
+          <div class="field field--wide">
+            <label for="f-client">Cliente *</label>
+            <input type="text" id="f-client" required maxlength="120" placeholder="Nome do cliente">
+          </div>
+          <div class="field">
+            <label for="f-install-qty">Qtd. instalações</label>
+            <input type="number" id="f-install-qty" min="0" step="1" value="1" inputmode="numeric">
+          </div>
+          <div class="field">
+            <label for="f-install-unit">Valor por instalação (R$)</label>
+            <input type="number" id="f-install-unit" min="0" step="0.01" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="f-camera-qty">Qtd. câmeras</label>
+            <input type="number" id="f-camera-qty" min="0" step="1" value="0" inputmode="numeric">
+          </div>
+          <div class="field">
+            <label for="f-camera-unit">Valor por câmera (R$)</label>
+            <input type="number" id="f-camera-unit" min="0" step="0.01" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="f-status">Status</label>
+            <select id="f-status">
+              <option value="ok">Concluído</option>
+              <option value="pendente">Pendente</option>
+            </select>
+          </div>
+          <div class="field field--wide">
+            <label for="f-note">Observação</label>
+            <input type="text" id="f-note" maxlength="200" placeholder="Opcional">
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn--primary" id="btn-save">Salvar lançamento</button>
+          <button type="button" class="btn btn--ghost" id="btn-cancel-edit" hidden>Cancelar edição</button>
+        </div>
+      </form>
+
+      <div class="card">
+        <div class="card__head card__head--wrap">
+          <h2>Lançamentos</h2>
+          <div class="filters">
+            <label class="sr-only" for="filter-month">Filtrar por mês</label>
+            <input type="month" id="filter-month">
+            <label class="sr-only" for="filter-search">Buscar cliente</label>
+            <input type="search" id="filter-search" placeholder="Buscar cliente ou ID">
+          </div>
+        </div>
+        <p class="hint" id="records-summary"></p>
+        <div id="records-list" class="records"></div>
+        <div class="empty" id="records-empty" hidden>
+          <p><strong>Nenhum lançamento neste período.</strong></p>
+          <p>Adicione acima ou importe a planilha em <button class="linkbtn" type="button" data-goto="ajustes">Ajustes</button>.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= RELATÓRIOS ================= -->
+    <section id="tab-relatorios" class="tab-panel" role="tabpanel" aria-label="Relatórios" hidden>
+      <div class="card">
+        <div class="card__head">
+          <h2>Gerar relatório</h2>
+          <span class="hint">Semanal, mensal ou de qualquer período.</span>
+        </div>
+
+        <div class="segmented" role="group" aria-label="Tipo de relatório">
+          <button type="button" class="segmented__btn is-active" data-period="week">Semanal</button>
+          <button type="button" class="segmented__btn" data-period="month">Mensal</button>
+          <button type="button" class="segmented__btn" data-period="custom">Personalizado</button>
+        </div>
+
+        <div class="period-box" id="period-week">
+          <div class="field">
+            <label for="report-week">Semana (segunda a domingo)</label>
+            <input type="week" id="report-week">
+          </div>
+        </div>
+        <div class="period-box" id="period-month" hidden>
+          <div class="field">
+            <label for="report-month">Mês</label>
+            <input type="month" id="report-month">
+          </div>
+        </div>
+        <div class="period-box period-box--row" id="period-custom" hidden>
+          <div class="field">
+            <label for="report-start">De</label>
+            <input type="date" id="report-start">
+          </div>
+          <div class="field">
+            <label for="report-end">Até</label>
+            <input type="date" id="report-end">
+          </div>
+        </div>
+
+        <div class="quick-ranges">
+          <button type="button" class="chip" data-quick="today">Hoje</button>
+          <button type="button" class="chip" data-quick="7d">Últimos 7 dias</button>
+          <button type="button" class="chip" data-quick="week">Esta semana</button>
+          <button type="button" class="chip" data-quick="month">Este mês</button>
+          <button type="button" class="chip" data-quick="lastmonth">Mês passado</button>
+        </div>
+
+        <label class="check">
+          <input type="checkbox" id="report-clients">
+          <span>Incluir lista de clientes no texto compartilhado</span>
+        </label>
+
+        <div class="form-actions">
+          <button type="button" class="btn btn--primary" id="btn-generate">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5m0 14h16M8 16v-5m4 5V8m4 8v-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            Gerar relatório agora
+          </button>
+        </div>
+      </div>
+
+      <div id="report-output" class="report" hidden></div>
+
+      <div id="report-actions" class="share-bar" hidden>
+        <button type="button" class="btn btn--wa" data-share="whatsapp">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 0 1-11.9 7L4 20l1.1-3.9A8 8 0 1 1 20 12Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9 9c.4 2.5 2.5 4.6 5 5l1-1.5 2 1.2c-.5 1.6-2 2.3-3.5 1.8-2.8-.9-5-3.1-5.9-5.9-.5-1.5.2-3 1.8-3.5L10.6 8 9 9Z" fill="currentColor"/></svg>
+          WhatsApp
+        </button>
+        <button type="button" class="btn btn--mail" data-share="email">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="m4 7 8 6 8-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          E-mail
+        </button>
+        <button type="button" class="btn btn--ghost" data-share="native">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="6" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="18" cy="19" r="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m8.2 10.8 7.6-4.4M8.2 13.2l7.6 4.4" stroke="currentColor" stroke-width="2"/></svg>
+          Compartilhar
+        </button>
+        <button type="button" class="btn btn--ghost" data-share="copy">Copiar texto</button>
+        <button type="button" class="btn btn--ghost" data-share="csv">Baixar CSV</button>
+        <button type="button" class="btn btn--ghost" data-share="print">Imprimir / PDF</button>
+      </div>
+    </section>
+
+    <!-- ================= AJUSTES ================= -->
+    <section id="tab-ajustes" class="tab-panel" role="tabpanel" aria-label="Ajustes" hidden>
+      <form id="settings-form" class="card">
+        <div class="card__head">
+          <h2>Ajustes</h2>
+          <span class="hint">Valores padrão usados em novos lançamentos e no cabeçalho dos relatórios.</span>
+        </div>
+        <div class="form-grid">
+          <div class="field field--wide">
+            <label for="s-company">Nome da empresa / responsável</label>
+            <input type="text" id="s-company" maxlength="80" placeholder="Ex.: Minha Empresa">
+          </div>
+          <div class="field">
+            <label for="s-install-unit">Valor padrão instalação (R$)</label>
+            <input type="number" id="s-install-unit" min="0" step="0.01" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label for="s-camera-unit">Valor padrão câmera (R$)</label>
+            <input type="number" id="s-camera-unit" min="0" step="0.01" inputmode="decimal">
+          </div>
+          <div class="field field--wide">
+            <label for="s-footer">Rodapé do relatório</label>
+            <input type="text" id="s-footer" maxlength="160" placeholder="Ex.: Obrigado pela preferência!">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn--primary">Salvar ajustes</button>
+        </div>
+      </form>
+
+      <div class="card">
+        <div class="card__head">
+          <h2>Dados</h2>
+          <span class="hint">Seus dados ficam apenas neste navegador/aparelho.</span>
+        </div>
+        <div class="data-actions">
+          <label class="btn btn--primary btn--file" for="import-file">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0 4 4m-4-4L8 8M4 16v4h16v-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Importar planilha (.xlsx/.csv)
+          </label>
+          <input type="file" id="import-file" accept=".xlsx,.xls,.csv" hidden>
+
+          <button type="button" class="btn btn--ghost" id="btn-export">Baixar backup (.json)</button>
+          <label class="btn btn--ghost btn--file" for="restore-file">Restaurar backup</label>
+          <input type="file" id="restore-file" accept=".json,application/json" hidden>
+
+          <button type="button" class="btn btn--danger" id="btn-clear">Apagar todos os dados</button>
+        </div>
+        <p class="hint" id="storage-info"></p>
+      </div>
+
+      <div class="card card--muted">
+        <h2>Sobre</h2>
+        <p class="hint">
+          PWA instalável, funciona offline e pode ser aberto direto do link do GitHub Pages.
+          Relatórios semanais (segunda a domingo), mensais e por período personalizado.
+          Compartilhamento por WhatsApp, e-mail, texto copiado ou arquivo CSV.
+        </p>
+        <p class="hint">Versão 1.0.0</p>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar" role="tablist" aria-label="Navegação principal">
+    <button class="tabbar__btn is-active" type="button" role="tab" data-tab="lancamentos" aria-selected="true">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      Lançamentos
+    </button>
+    <button class="tabbar__btn" type="button" role="tab" data-tab="relatorios" aria-selected="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5m0 14h16M8 16v-5m4 5V8m4 8v-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      Relatórios
+    </button>
+    <button class="tabbar__btn" type="button" role="tab" data-tab="ajustes" aria-selected="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6l1.4 1.4m10 10 1.4 1.4m0-12.8-1.4 1.4m-10 10-1.4 1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      Ajustes
+    </button>
+  </nav>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="./vendor/xlsx.full.min.js"></script>
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+# dependências
+node_modules/
+package-lock.json
+
+# planilhas e dados reais (nunca versionar dados de clientes)
+*.xlsx
+*.xls
+*.csv
+backup-*.json
+relatorio-*.json
+
+# sistema
+.DS_Store
+Thumbs.db
+*.log

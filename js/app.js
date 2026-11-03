@@ -1,0 +1,726 @@
+import {
+  addDays, currency, currentMonthISO, DEFAULT_SETTINGS, endOfMonth, formatDateBR, formatMonthBR,
+  isValidRecord, lastMonthISO, loadRecords, loadSettings, makeRecord, numberBR, recordTotals,
+  saveRecords, saveSettings, startOfMonth, startOfWeek, todayISO, toNumber, weekdayShort,
+  weekInputValue, weekStartFromInput,
+} from './db.js';
+import {
+  buildReport, emailSubject, reportFileName, reportToCSV, reportToText,
+} from './reports.js';
+import {
+  copyText, downloadFile, shareEmail, shareNative, shareWhatsApp,
+} from './share.js';
+import { importSpreadsheet } from './import.js';
+
+const $ = (selector, root = document) => root.querySelector(selector);
+const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+
+const state = {
+  records: [],
+  settings: { ...DEFAULT_SETTINGS },
+  filterMonth: currentMonthISO(),
+  search: '',
+  editingId: null,
+  periodType: 'week',
+  lastReport: null,
+  deferredInstall: null,
+};
+
+const els = {};
+
+document.addEventListener('DOMContentLoaded', init);
+
+function init() {
+  cacheElements();
+  state.records = loadRecords();
+  state.settings = loadSettings();
+
+  state.filterMonth = pickInitialMonth();
+
+  setFormDefaults();
+  setReportDefaults();
+  fillSettingsForm();
+  bindEvents();
+  renderAll();
+  registerServiceWorker();
+  setupInstallPrompt();
+}
+
+function cacheElements() {
+  els.form = $('#record-form');
+  els.formTitle = $('#form-title');
+  els.formHint = $('#form-hint');
+  els.recordId = $('#record-id');
+  els.date = $('#f-date');
+  els.clientId = $('#f-client-id');
+  els.client = $('#f-client');
+  els.installQty = $('#f-install-qty');
+  els.installUnit = $('#f-install-unit');
+  els.cameraQty = $('#f-camera-qty');
+  els.cameraUnit = $('#f-camera-unit');
+  els.status = $('#f-status');
+  els.note = $('#f-note');
+  els.saveBtn = $('#btn-save');
+  els.cancelEdit = $('#btn-cancel-edit');
+
+  els.filterMonth = $('#filter-month');
+  els.search = $('#filter-search');
+  els.recordsList = $('#records-list');
+  els.recordsEmpty = $('#records-empty');
+  els.recordsSummary = $('#records-summary');
+  els.kpiInstall = $('#kpi-install');
+  els.kpiCamera = $('#kpi-camera');
+  els.kpiTotal = $('#kpi-total');
+
+  els.brandName = $('#brand-name');
+  els.reportWeek = $('#report-week');
+  els.reportMonth = $('#report-month');
+  els.reportStart = $('#report-start');
+  els.reportEnd = $('#report-end');
+  els.reportClients = $('#report-clients');
+  els.reportOutput = $('#report-output');
+  els.reportActions = $('#report-actions');
+
+  els.settingsForm = $('#settings-form');
+  els.sCompany = $('#s-company');
+  els.sInstall = $('#s-install-unit');
+  els.sCamera = $('#s-camera-unit');
+  els.sFooter = $('#s-footer');
+  els.storageInfo = $('#storage-info');
+  els.importFile = $('#import-file');
+  els.restoreFile = $('#restore-file');
+  els.toast = $('#toast');
+  els.installBtn = $('#btn-install');
+}
+
+/* ---------------- inicialização ---------------- */
+
+function pickInitialMonth() {
+  const months = [...new Set(state.records.map((r) => r.date.slice(0, 7)))];
+  const current = currentMonthISO();
+  if (months.includes(current)) return current;
+  return months.sort().at(-1) || current;
+}
+
+function setFormDefaults() {
+  els.date.value = todayISO();
+  els.installQty.value = 1;
+  els.cameraQty.value = 0;
+  els.installUnit.value = state.settings.installUnit;
+  els.cameraUnit.value = state.settings.cameraUnit;
+  els.status.value = 'ok';
+  els.note.value = '';
+  els.client.value = '';
+  els.clientId.value = '';
+  els.recordId.value = '';
+  els.formTitle.textContent = 'Novo lançamento';
+  els.formHint.textContent = 'Preencha e salve. Tudo fica salvo neste aparelho.';
+  els.saveBtn.textContent = 'Salvar lançamento';
+  els.cancelEdit.hidden = true;
+  state.editingId = null;
+}
+
+function setReportDefaults() {
+  const today = todayISO();
+  els.reportWeek.value = weekInputValue(today);
+  els.reportMonth.value = currentMonthISO();
+  els.reportStart.value = startOfWeek(today);
+  els.reportEnd.value = today;
+  els.filterMonth.value = state.filterMonth;
+  els.reportClients.checked = false;
+}
+
+/* ---------------- eventos ---------------- */
+
+function bindEvents() {
+  $$('[data-tab]').forEach((btn) => btn.addEventListener('click', () => goToTab(btn.dataset.tab)));
+  $$('[data-goto]').forEach((btn) => btn.addEventListener('click', () => goToTab(btn.dataset.goto)));
+
+  els.form.addEventListener('submit', onSaveRecord);
+  els.cancelEdit.addEventListener('click', (e) => { e.preventDefault(); setFormDefaults(); });
+  els.recordsList.addEventListener('click', onRecordAction);
+
+  els.filterMonth.addEventListener('change', () => {
+    state.filterMonth = els.filterMonth.value || currentMonthISO();
+    renderRecords();
+    renderKpis();
+  });
+  els.search.addEventListener('input', () => {
+    state.search = els.search.value.trim().toLowerCase();
+    renderRecords();
+  });
+
+  $$('.segmented__btn').forEach((btn) => {
+    btn.addEventListener('click', () => setPeriodType(btn.dataset.period));
+  });
+  $$('[data-quick]').forEach((btn) => btn.addEventListener('click', () => applyQuickRange(btn.dataset.quick)));
+  $('#btn-generate').addEventListener('click', generateReport);
+  $$('#report-actions [data-share]').forEach((btn) => {
+    btn.addEventListener('click', () => onShare(btn.dataset.share));
+  });
+
+  els.settingsForm.addEventListener('submit', onSaveSettings);
+  els.reportClients.addEventListener('change', () => {
+    if (state.lastReport) renderReport(state.lastReport);
+  });
+  els.importFile.addEventListener('change', onImportFile);
+  els.restoreFile.addEventListener('change', onRestoreFile);
+  $('#btn-export').addEventListener('click', onExportBackup);
+  $('#btn-clear').addEventListener('click', onClearData);
+
+  window.addEventListener('online', () => toast('Conexão restabelecida.'));
+  window.addEventListener('offline', () => toast('Você está offline — o app continua funcionando.'));
+}
+
+/* ---------------- navegação ---------------- */
+
+function goToTab(tab) {
+  $$('.tab-panel').forEach((panel) => { panel.hidden = panel.id !== `tab-${tab}`; });
+  $$('.tabbar__btn').forEach((btn) => {
+    const active = btn.dataset.tab === tab;
+    btn.classList.toggle('is-active', active);
+    btn.setAttribute('aria-selected', String(active));
+  });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* ---------------- lançamentos ---------------- */
+
+function readForm() {
+  return {
+    id: els.recordId.value || undefined,
+    date: els.date.value,
+    clientId: els.clientId.value,
+    client: els.client.value,
+    installQty: toNumber(els.installQty.value, 1),
+    installUnit: toNumber(els.installUnit.value, state.settings.installUnit),
+    cameraQty: toNumber(els.cameraQty.value, 0),
+    cameraUnit: toNumber(els.cameraUnit.value, state.settings.cameraUnit),
+    status: els.status.value,
+    note: els.note.value,
+  };
+}
+
+function onSaveRecord(event) {
+  event.preventDefault();
+  const input = readForm();
+
+  if (!input.date) return toast('Informe a data.');
+  if (!input.client.trim()) {
+    els.client.focus();
+    return toast('Informe o nome do cliente.');
+  }
+
+  const record = makeRecord(input, state.settings);
+  const wasEditing = Boolean(state.editingId);
+
+  if (state.editingId) {
+    state.records = state.records.map((r) => (r.id === state.editingId ? record : r));
+  } else {
+    state.records.push(record);
+  }
+
+  persistRecords();
+  state.filterMonth = record.date.slice(0, 7);
+  els.filterMonth.value = state.filterMonth;
+  setFormDefaults();
+  renderAll();
+  toast(wasEditing ? 'Lançamento atualizado.' : 'Lançamento salvo.');
+}
+
+function onRecordAction(event) {
+  const button = event.target.closest('[data-action]');
+  if (!button) return;
+  const article = button.closest('[data-id]');
+  const id = article?.dataset.id;
+  const record = state.records.find((r) => r.id === id);
+  if (!record) return;
+
+  if (button.dataset.action === 'edit') startEdit(record);
+  if (button.dataset.action === 'delete') deleteRecord(record);
+}
+
+function startEdit(record) {
+  state.editingId = record.id;
+  els.recordId.value = record.id;
+  els.date.value = record.date;
+  els.clientId.value = record.clientId || '';
+  els.client.value = record.client;
+  els.installQty.value = record.installQty;
+  els.installUnit.value = record.installUnit;
+  els.cameraQty.value = record.cameraQty;
+  els.cameraUnit.value = record.cameraUnit;
+  els.status.value = record.status;
+  els.note.value = record.note || '';
+  els.formTitle.textContent = 'Editar lançamento';
+  els.formHint.textContent = 'Altere os campos e salve.';
+  els.saveBtn.textContent = 'Salvar alterações';
+  els.cancelEdit.hidden = false;
+  els.form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function deleteRecord(record) {
+  const ok = window.confirm(`Apagar o lançamento de ${record.client} (${formatDateBR(record.date)})?`);
+  if (!ok) return;
+  state.records = state.records.filter((r) => r.id !== record.id);
+  persistRecords();
+  if (state.editingId === record.id) setFormDefaults();
+  renderAll();
+  toast('Lançamento apagado.');
+}
+
+function filteredRecords() {
+  return state.records
+    .filter((r) => !state.filterMonth || r.date.startsWith(state.filterMonth))
+    .filter((r) => {
+      if (!state.search) return true;
+      return r.client.toLowerCase().includes(state.search)
+        || String(r.clientId || '').toLowerCase().includes(state.search);
+    })
+    .sort((a, b) => (a.date === b.date ? a.client.localeCompare(b.client, 'pt-BR') : b.date.localeCompare(a.date)));
+}
+
+function renderRecords() {
+  const records = filteredRecords();
+  els.recordsList.innerHTML = records.map(recordHtml).join('');
+  els.recordsEmpty.hidden = records.length > 0;
+
+  const total = records.reduce((sum, r) => sum + recordTotals(r).total, 0);
+  els.recordsSummary.textContent = records.length
+    ? `${numberBR(records.length)} lançamento(s) · ${currency(total)}`
+    : '';
+}
+
+function recordHtml(record) {
+  const t = recordTotals(record);
+  const tags = [];
+  if (t.installQty) tags.push(`<span class="tag">${numberBR(t.installQty)} inst.</span>`);
+  if (t.cameraQty) tags.push(`<span class="tag tag--cam">${numberBR(t.cameraQty)} câm.</span>`);
+  if (record.status === 'pendente') tags.push('<span class="tag tag--pending">Pendente</span>');
+  if (record.note) tags.push(`<span class="tag" title="${esc(record.note)}">obs.</span>`);
+
+  return `
+    <article class="record" data-id="${esc(record.id)}">
+      <div class="record__main">
+        <span class="record__client">${esc(record.client)}</span>
+        <span class="record__meta">
+          ${formatDateBR(record.date)} · ${weekdayShort(record.date)}
+          ${record.clientId ? ` · ID ${esc(record.clientId)}` : ''}
+        </span>
+        <div class="record__tags">${tags.join('')}</div>
+      </div>
+      <div class="record__value">${currency(t.total)}</div>
+      <div class="record__actions">
+        <button class="iconbtn" type="button" data-action="edit" aria-label="Editar ${esc(record.client)}" title="Editar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        </button>
+        <button class="iconbtn iconbtn--danger" type="button" data-action="delete" aria-label="Apagar ${esc(record.client)}" title="Apagar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14"/></svg>
+        </button>
+      </div>
+    </article>`;
+}
+
+function renderKpis() {
+  const records = state.records.filter((r) => r.date.startsWith(state.filterMonth));
+  let installs = 0;
+  let cameras = 0;
+  let total = 0;
+  for (const r of records) {
+    const t = recordTotals(r);
+    installs += t.installQty;
+    cameras += t.cameraQty;
+    total += t.total;
+  }
+  els.kpiInstall.textContent = numberBR(installs);
+  els.kpiCamera.textContent = numberBR(cameras);
+  els.kpiTotal.textContent = currency(total);
+}
+
+function persistRecords() {
+  state.records.sort((a, b) => a.date.localeCompare(b.date));
+  saveRecords(state.records);
+}
+
+/* ---------------- relatórios ---------------- */
+
+function setPeriodType(type) {
+  state.periodType = type;
+  $$('.segmented__btn').forEach((btn) => btn.classList.toggle('is-active', btn.dataset.period === type));
+  $('#period-week').hidden = type !== 'week';
+  $('#period-month').hidden = type !== 'month';
+  $('#period-custom').hidden = type !== 'custom';
+}
+
+function applyQuickRange(quick) {
+  const today = todayISO();
+  if (quick === 'today') {
+    setPeriodType('custom');
+    els.reportStart.value = today;
+    els.reportEnd.value = today;
+  } else if (quick === '7d') {
+    setPeriodType('custom');
+    els.reportStart.value = addDays(today, -6);
+    els.reportEnd.value = today;
+  } else if (quick === 'week') {
+    setPeriodType('week');
+    els.reportWeek.value = weekInputValue(today);
+  } else if (quick === 'month') {
+    setPeriodType('month');
+    els.reportMonth.value = currentMonthISO();
+  } else if (quick === 'lastmonth') {
+    setPeriodType('month');
+    els.reportMonth.value = lastMonthISO();
+  }
+  generateReport();
+}
+
+function resolveRange() {
+  if (state.periodType === 'week') {
+    const start = weekStartFromInput(els.reportWeek.value);
+    return { start, end: addDays(start, 6), type: 'week' };
+  }
+  if (state.periodType === 'month') {
+    const ym = els.reportMonth.value || currentMonthISO();
+    return { start: startOfMonth(ym), end: endOfMonth(ym), type: 'month' };
+  }
+  let start = els.reportStart.value;
+  let end = els.reportEnd.value;
+  if (!start || !end) return null;
+  if (start > end) [start, end] = [end, start];
+  const type = start === end ? 'day' : 'custom';
+  return { start, end, type };
+}
+
+function generateReport() {
+  const range = resolveRange();
+  if (!range) return toast('Escolha as datas do período.');
+
+  const report = buildReport(state.records, { ...range, settings: state.settings });
+  state.lastReport = report;
+  renderReport(report);
+  els.reportOutput.hidden = false;
+  els.reportActions.hidden = false;
+  els.reportOutput.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  if (report.totals.count === 0) toast('Nenhum lançamento nesse período.');
+}
+
+function renderReport(report) {
+  const includeClients = els.reportClients.checked;
+  const { totals } = report;
+
+  const dayRows = report.days.map((day) => `
+    <tr>
+      <td>${formatDateBR(day.date)} <span class="hint">(${weekdayShort(day.date)})</span></td>
+      <td class="num">${numberBR(day.installQty)}</td>
+      <td class="num">${numberBR(day.cameraQty)}</td>
+      <td class="num">${currency(day.total)}</td>
+    </tr>`).join('');
+
+  const clientRows = includeClients && report.records.length ? `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Data</th><th>Cliente</th><th>ID</th><th class="num">Inst.</th><th class="num">Câm.</th><th class="num">Total</th></tr></thead>
+        <tbody>
+          ${report.records.map((r) => {
+            const t = recordTotals(r);
+            return `<tr>
+              <td>${formatDateBR(r.date)}</td>
+              <td>${esc(r.client)}${r.status === 'pendente' ? ' <span class="tag tag--pending">Pendente</span>' : ''}</td>
+              <td>${esc(r.clientId || '—')}</td>
+              <td class="num">${numberBR(t.installQty)}</td>
+              <td class="num">${numberBR(t.cameraQty)}</td>
+              <td class="num">${currency(t.total)}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>` : '';
+
+  const daysTable = totals.count === 0
+    ? '<p class="hint">Nenhum lançamento no período selecionado.</p>'
+    : `<div class="table-wrap">
+        <table>
+          <thead><tr><th>Dia</th><th class="num">Instalações</th><th class="num">Câmeras</th><th class="num">Total</th></tr></thead>
+          <tbody>${dayRows}</tbody>
+          <tfoot><tr>
+            <td>Total (${numberBR(totals.days)} dia${totals.days === 1 ? '' : 's'})</td>
+            <td class="num">${numberBR(totals.installQty)}</td>
+            <td class="num">${numberBR(totals.cameraQty)}</td>
+            <td class="num">${currency(totals.total)}</td>
+          </tr></tfoot>
+        </table>
+      </div>`;
+
+  els.reportOutput.innerHTML = `
+    <div class="report__head">
+      <span class="report__company">${esc(report.settings.company || 'Relatório de Instalações')}</span>
+      <h2 class="report__title">${esc(report.typeLabel)}</h2>
+      <span class="report__period">${report.periodText}</span>
+    </div>
+
+    <div class="report__kpis">
+      <div class="report__kpi"><span>Instalações</span><strong>${numberBR(totals.installQty)}</strong></div>
+      <div class="report__kpi"><span>Câmeras</span><strong>${numberBR(totals.cameraQty)}</strong></div>
+      <div class="report__kpi"><span>Média por dia</span><strong>${currency(totals.averagePerDay)}</strong></div>
+      <div class="report__kpi report__kpi--total"><span>Total</span><strong>${currency(totals.total)}</strong></div>
+    </div>
+
+    ${daysTable}
+    ${clientRows}
+
+    <div class="report__foot">
+      <span>${numberBR(totals.count)} lançamento(s) · ${numberBR(totals.days)} dia(s) com movimento</span>
+      <span>Gerado em ${report.generatedAt.toLocaleString('pt-BR')}</span>
+      ${report.settings.footer ? `<span>${esc(report.settings.footer)}</span>` : ''}
+    </div>`;
+}
+
+async function onShare(kind) {
+  const report = state.lastReport;
+  if (!report) return toast('Gere um relatório primeiro.');
+
+  const includeClients = els.reportClients.checked;
+  const plain = reportToText(report, { includeClients, style: 'plain' });
+  const whatsappText = reportToText(report, { includeClients, style: 'whatsapp' });
+
+  if (kind === 'whatsapp') {
+    if (whatsappText.length > 6000) return toast('Relatório muito longo. Desmarque a lista de clientes ou envie o CSV.');
+    shareWhatsApp(whatsappText);
+    return;
+  }
+
+  if (kind === 'email') {
+    if (plain.length > 1800) {
+      const subject = emailSubject(report);
+      const shorter = reportToText(report, { includeClients: false, style: 'plain' });
+      shareEmail(subject, shorter);
+      toast('E-mail aberto sem a lista de clientes (limite de tamanho). Use o CSV para a lista completa.');
+      return;
+    }
+    shareEmail(emailSubject(report), plain);
+    return;
+  }
+
+  if (kind === 'native') {
+    const ok = await shareNative({ title: report.typeLabel, text: whatsappText });
+    if (!ok) {
+      const copied = await copyText(whatsappText);
+      toast(copied ? 'Texto copiado — cole onde quiser compartilhar.' : 'Compartilhamento indisponível.');
+    }
+    return;
+  }
+
+  if (kind === 'copy') {
+    const ok = await copyText(whatsappText);
+    toast(ok ? 'Relatório copiado.' : 'Não foi possível copiar.');
+    return;
+  }
+
+  if (kind === 'csv') {
+    downloadFile(reportFileName(report, 'csv'), reportToCSV(report), 'text/csv;charset=utf-8');
+    toast('CSV gerado.');
+    return;
+  }
+
+  if (kind === 'print') {
+    window.print();
+  }
+}
+
+/* ---------------- ajustes ---------------- */
+
+function fillSettingsForm() {
+  els.sCompany.value = state.settings.company;
+  els.sInstall.value = state.settings.installUnit;
+  els.sCamera.value = state.settings.cameraUnit;
+  els.sFooter.value = state.settings.footer;
+}
+
+function onSaveSettings(event) {
+  event.preventDefault();
+  const settings = {
+    company: els.sCompany.value.trim() || DEFAULT_SETTINGS.company,
+    installUnit: Math.max(0, toNumber(els.sInstall.value, DEFAULT_SETTINGS.installUnit)),
+    cameraUnit: Math.max(0, toNumber(els.sCamera.value, DEFAULT_SETTINGS.cameraUnit)),
+    footer: els.sFooter.value.trim(),
+  };
+  state.settings = settings;
+  saveSettings(settings);
+  els.brandName.textContent = settings.company;
+  if (!state.editingId) {
+    els.installUnit.value = settings.installUnit;
+    els.cameraUnit.value = settings.cameraUnit;
+  }
+  renderStorageInfo();
+  toast('Ajustes salvos.');
+}
+
+/* ---------------- dados ---------------- */
+
+function dedupeKey(record) {
+  return `${record.date}|${record.clientId || ''}|${record.client.toLowerCase()}`;
+}
+
+async function onImportFile(event) {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (!file) return;
+
+  try {
+    const result = await importSpreadsheet(file, state.settings);
+    if (!result.records.length) {
+      toast('Nenhum lançamento encontrado na planilha.');
+      return;
+    }
+
+    const merge = window.confirm(
+      `Encontrados ${result.records.length} lançamento(s) em "${file.name}".\n\n`
+      + 'OK = adicionar aos existentes\nCancelar = substituir tudo pelos dados da planilha',
+    );
+
+    const base = merge ? state.records : [];
+    const seen = new Set(base.map(dedupeKey));
+    let duplicates = 0;
+    const added = [];
+
+    for (const record of result.records) {
+      const key = dedupeKey(record);
+      if (seen.has(key)) { duplicates += 1; continue; }
+      seen.add(key);
+      added.push(record);
+    }
+
+    state.records = [...base, ...added];
+    persistRecords();
+    if (state.records.length) state.filterMonth = pickInitialMonth();
+    els.filterMonth.value = state.filterMonth;
+    renderAll();
+    setReportDefaults();
+
+    toast(`${added.length} importado(s)${duplicates ? ` · ${duplicates} duplicado(s)` : ''}${result.ignored ? ` · ${result.ignored} linha(s) ignorada(s)` : ''}.`);
+  } catch (err) {
+    console.error(err);
+    toast(`Falha ao importar: ${err.message}`);
+  }
+}
+
+function onExportBackup() {
+  const payload = {
+    app: 'relatorio-instalacoes',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    settings: state.settings,
+    records: state.records,
+  };
+  downloadFile(`backup-relatorios-${todayISO()}.json`, JSON.stringify(payload, null, 2), 'application/json');
+  toast('Backup gerado.');
+}
+
+async function onRestoreFile(event) {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (!file) return;
+
+  try {
+    const data = JSON.parse(await file.text());
+    const records = Array.isArray(data) ? data : data.records;
+    if (!Array.isArray(records)) throw new Error('Arquivo de backup inválido.');
+
+    const valid = records.filter(isValidRecord);
+    const ok = window.confirm(`Restaurar ${valid.length} lançamento(s)? Os dados atuais serão substituídos.`);
+    if (!ok) return;
+
+    state.records = valid.map((r) => makeRecord(r, state.settings));
+    if (data.settings) {
+      state.settings = { ...state.settings, ...data.settings };
+      saveSettings(state.settings);
+      fillSettingsForm();
+      els.brandName.textContent = state.settings.company;
+    }
+    persistRecords();
+    state.filterMonth = pickInitialMonth();
+    els.filterMonth.value = state.filterMonth;
+    renderAll();
+    setReportDefaults();
+    toast('Backup restaurado.');
+  } catch (err) {
+    toast(`Falha ao restaurar: ${err.message}`);
+  }
+}
+
+function onClearData() {
+  const ok = window.confirm('Apagar TODOS os lançamentos deste aparelho? Essa ação não pode ser desfeita.');
+  if (!ok) return;
+  state.records = [];
+  saveRecords([]);
+  state.lastReport = null;
+  els.reportOutput.hidden = true;
+  els.reportActions.hidden = true;
+  setFormDefaults();
+  renderAll();
+  toast('Dados apagados.');
+}
+
+function renderStorageInfo() {
+  const records = state.records.length;
+  const bytes = new Blob([JSON.stringify(state.records)]).size;
+  els.storageInfo.textContent = `${numberBR(records)} lançamento(s) salvos · ${(bytes / 1024).toFixed(1)} KB · armazenamento local do navegador.`;
+}
+
+/* ---------------- utilidades ---------------- */
+
+function renderAll() {
+  els.brandName.textContent = state.settings.company || DEFAULT_SETTINGS.company;
+  renderKpis();
+  renderRecords();
+  renderStorageInfo();
+}
+
+function toast(message, ms = 3000) {
+  els.toast.textContent = message;
+  els.toast.classList.add('is-visible');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => els.toast.classList.remove('is-visible'), ms);
+}
+
+function esc(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+/* ---------------- PWA ---------------- */
+
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  if (!/^https?:$/.test(location.protocol)) return;
+  navigator.serviceWorker.register(new URL('./sw.js', location.href), { scope: './' }).catch((err) => {
+    console.warn('Service worker não registrado:', err);
+  });
+}
+
+function setupInstallPrompt() {
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    state.deferredInstall = event;
+    els.installBtn.hidden = false;
+  });
+
+  els.installBtn.addEventListener('click', async () => {
+    if (!state.deferredInstall) return;
+    state.deferredInstall.prompt();
+    await state.deferredInstall.userChoice;
+    state.deferredInstall = null;
+    els.installBtn.hidden = true;
+  });
+
+  window.addEventListener('appinstalled', () => {
+    els.installBtn.hidden = true;
+    toast('App instalado!');
+  });
+}
