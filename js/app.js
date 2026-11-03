@@ -22,6 +22,7 @@ const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const DRIVE_KEY = 'ri.drive.v1';
 const META_KEY = 'ri.meta.v1';
 const AUTO_SYNC_DELAY = 5000;
+const DEFAULT_DRIVE_CLIENT_ID = '619731682538-8vk1i4h68fm2uhmsbmjn38l3hgc2isbc.apps.googleusercontent.com';
 
 const state = {
   records: [],
@@ -765,9 +766,14 @@ function renderStorageInfo() {
 /* ---------------- Google Drive ---------------- */
 
 function loadDriveState() {
-  const base = { clientId: '', linked: false, email: '', autoSync: false, lastSyncAt: null };
+  const base = { clientId: DEFAULT_DRIVE_CLIENT_ID, linked: false, email: '', autoSync: false, lastSyncAt: null };
   try {
-    return { ...base, ...JSON.parse(localStorage.getItem(DRIVE_KEY) || '{}') };
+    const saved = JSON.parse(localStorage.getItem(DRIVE_KEY) || '{}');
+    return {
+      ...base,
+      ...saved,
+      clientId: String(saved.clientId || '').trim() || DEFAULT_DRIVE_CLIENT_ID,
+    };
   } catch {
     return base;
   }
@@ -876,7 +882,7 @@ async function ensureDriveToken({ clientId, force = false } = {}) {
     return state.driveToken;
   }
 
-  const id = (clientId || els.driveClient.value || state.drive.clientId || '').trim();
+  const id = (clientId || els.driveClient.value || state.drive.clientId || DEFAULT_DRIVE_CLIENT_ID).trim();
   if (!id) throw new Error('Informe o Client ID do Google em Ajustes.');
   if (!/^[\w-]+\.apps\.googleusercontent\.com$/.test(id)) {
     throw new Error('Client ID inválido. Ele termina com ".apps.googleusercontent.com".');
@@ -894,14 +900,11 @@ async function onDriveConnect() {
 
   const typed = (els.driveClient.value || '').trim();
   if (!typed) {
-    state.driveNotice = 'Cole o Client ID no campo acima para entrar com o Google.';
-    setClientFieldError(true);
-    els.driveClient.focus();
+    els.driveClient.value = DEFAULT_DRIVE_CLIENT_ID;
+    persistClientId();
     renderDrive();
-    toast('Falta o Client ID do Google. Abra "Como criar o Client ID" e siga os passos.', 5000);
-    return;
   }
-  if (!/^[\w-]+\.apps\.googleusercontent\.com$/.test(typed)) {
+  if (!/^[\w-]+\.apps\.googleusercontent\.com$/.test(els.driveClient.value.trim())) {
     state.driveNotice = 'O Client ID não parece válido — ele termina com .apps.googleusercontent.com.';
     setClientFieldError(true);
     els.driveClient.focus();
@@ -1079,8 +1082,18 @@ function handleDriveError(err) {
   console.warn('Google Drive:', err);
   if (err?.code === 'AUTH') state.driveToken = null;
   const message = err?.message || 'Falha ao acessar o Google Drive.';
+
   if (/popup_closed|cancelad/i.test(message)) {
     toast('Login cancelado.');
+  } else if (/redirect_uri_mismatch|origin|origem/i.test(message)) {
+    state.driveNotice = 'Origem não autorizada: adicione https://bigfatalbear.github.io nas “Origens JavaScript autorizadas” do cliente OAuth.';
+    toast(state.driveNotice, 9000);
+  } else if (/access_denied|acesso negado|bloqueado/i.test(message)) {
+    state.driveNotice = 'Acesso negado. Adicione seu e-mail em “Usuários de teste” na tela de consentimento.';
+    toast(state.driveNotice, 8000);
+  } else if (/invalid_client|client_id|unknown client/i.test(message)) {
+    state.driveNotice = 'Client ID não reconhecido pelo Google. Confira o valor em Ajustes.';
+    toast(state.driveNotice, 7000);
   } else {
     toast(message);
   }

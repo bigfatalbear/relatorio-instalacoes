@@ -49,7 +49,9 @@ Em **Ajustes → Importar planilha**, selecione o `.xlsx`. O app lê todas as ab
 
 O app entra com a **sua** conta Google e guarda um `relatorio-instalacoes-backup.json` na pasta privada do app no Drive (escopo `drive.appdata`). O arquivo **não aparece** na lista normal do Drive e nenhum outro app consegue lê-lo.
 
-### Configuração única (10 min, gratuita)
+> **Já vem configurado:** o app inclui um Client ID padrão, então o botão *Entrar com Google* funciona direto. Os passos abaixo são só se você quiser usar um projeto próprio (ou se precisar corrigir a origem autorizada).
+
+### Usar seu próprio Client ID (opcional)
 
 1. Abra <https://console.cloud.google.com> e crie um projeto (ex.: `Relatorio Instalacoes`).
 2. **APIs e serviços → Biblioteca** → ative **Google Drive API**.
@@ -78,9 +80,18 @@ O app entra com a **sua** conta Google e guarda um `relatorio-instalacoes-backup
 - O login vale ~1 hora por sessão; depois o app tenta renovar sozinho ou pede um toque em *Entrar com Google*.
 - Offline: as alterações ficam no aparelho e são enviadas quando a conexão volta.
 
+### Problemas comuns
+
+| Erro | Causa / correção |
+|---|---|
+| `redirect_uri_mismatch` ou “registre a origem JavaScript no Console do Google Cloud” | Em **Credenciais → seu cliente OAuth**, adicione em **Origens JavaScript autorizadas** exatamente `https://bigfatalbear.github.io` (sem barra e sem caminho) e salve. Pode levar alguns minutos para valer. |
+| `access_denied` / “Acesso bloqueado” | Adicione seu e-mail em **Usuários de teste** na tela de consentimento. |
+| “Google Drive API has not been used in project…” | Ative a **Google Drive API** no projeto selecionado. |
+| A janela do Google não abre no app instalado | Abra o link pelo **Chrome** e faça o login uma vez. |
+
 ### Limitações
 
-- É necessário criar o Client ID na sua conta Google (não há como embutir um segredo no site estático).
+- O Client ID padrão é público (como qualquer Client ID de site) e só funciona a partir da origem autorizada `https://bigfatalbear.github.io`.
 - Para distribuir o app para muitas pessoas fora dos testadores, o Google pode exigir verificação do OAuth.
 - A exclusão do backup no Drive não apaga os dados locais (e vice-versa).
 

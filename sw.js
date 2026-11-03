@@ -1,5 +1,5 @@
 /* Service worker — cache offline do app. */
-const CACHE = 'ri-v5';
+const CACHE = 'ri-v6';
 
 const ASSETS = [
   './',
