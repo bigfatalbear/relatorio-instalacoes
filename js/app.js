@@ -40,6 +40,7 @@ const state = {
   syncing: false,
   driveNotice: '',
   autoSyncTimer: null,
+  clientIdTimer: null,
 };
 
 const els = {};
@@ -120,6 +121,7 @@ function cacheElements() {
 
   els.driveClient = $('#drive-client');
   els.driveClientField = $('#drive-client-field');
+  els.drivePaste = $('#btn-drive-paste');
   els.driveStatus = $('#drive-status');
   els.driveEmail = $('#drive-email');
   els.driveAuto = $('#drive-auto');
@@ -223,7 +225,11 @@ function bindEvents() {
       state.driveNotice = '';
       renderDrive();
     }
+    clearTimeout(state.clientIdTimer);
+    state.clientIdTimer = setTimeout(persistClientId, 400);
   });
+  els.driveClient.addEventListener('change', persistClientId);
+  els.drivePaste.addEventListener('click', onPasteClientId);
 
   window.addEventListener('online', () => {
     toast('Conexão restabelecida.');
@@ -792,7 +798,9 @@ function touchData() {
 
 function renderDrive() {
   const d = state.drive;
-  els.driveClient.value = d.clientId || els.driveClient.value || '';
+  if (document.activeElement !== els.driveClient) {
+    els.driveClient.value = d.clientId || els.driveClient.value || '';
+  }
 
   els.driveEmail.hidden = !d.linked;
   els.driveEmail.textContent = d.linked ? `Conectado como ${d.email || 'sua conta Google'}` : '';
@@ -831,6 +839,36 @@ function setClientFieldError(on) {
   els.driveClientField.classList.toggle('field--error', Boolean(on));
   if (on) els.driveClient.setAttribute('aria-invalid', 'true');
   else els.driveClient.removeAttribute('aria-invalid');
+}
+
+function persistClientId() {
+  clearTimeout(state.clientIdTimer);
+  const value = (els.driveClient.value || '').trim();
+  if (value === state.drive.clientId) return;
+  state.drive.clientId = value;
+  saveDriveState();
+}
+
+async function onPasteClientId() {
+  try {
+    if (!navigator.clipboard?.readText) throw new Error('clipboard indisponível');
+    const text = (await navigator.clipboard.readText() || '').trim();
+    if (!text) {
+      toast('A área de transferência está vazia.');
+      return;
+    }
+    els.driveClient.value = text;
+    persistClientId();
+    const valid = /^[\w-]+\.apps\.googleusercontent\.com$/.test(text);
+    setClientFieldError(!valid);
+    renderDrive();
+    toast(valid
+      ? 'Client ID colado. Agora toque em "Entrar com Google".'
+      : 'O texto colado não parece um Client ID (deve terminar em .apps.googleusercontent.com).', 4500);
+  } catch {
+    els.driveClient.focus();
+    toast('Não consegui ler a área de transferência. Mantenha pressionado o campo e escolha "Colar".', 5000);
+  }
 }
 
 async function ensureDriveToken({ clientId, force = false } = {}) {
@@ -875,6 +913,7 @@ async function onDriveConnect() {
   setSyncing(true);
   state.driveNotice = '';
   setClientFieldError(false);
+  persistClientId();
   try {
     const token = await ensureDriveToken({ force: true });
     const info = await getUserInfo(token.accessToken);

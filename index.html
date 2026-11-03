@@ -238,11 +238,15 @@
         </div>
 
         <div class="field" id="drive-client-field">
-          <label for="drive-client">Client ID do Google (OAuth)</label>
+          <div class="field__top">
+            <label for="drive-client">Client ID do Google (OAuth)</label>
+            <button type="button" class="linkbtn" id="btn-drive-paste">Colar</button>
+          </div>
           <input type="text" id="drive-client" spellcheck="false" autocomplete="off" placeholder="Cole aqui o Client ID (ex.: 123456-abc.apps.googleusercontent.com)">
         </div>
         <p class="hint">
-          Sem o Client ID o login não funciona. Ele é gratuito e você cria uma única vez no Google Cloud
+          O texto cinza é só exemplo — é preciso colar o <strong>seu</strong> Client ID.
+          Ele é gratuito e você cria uma única vez no Google Cloud
           (origem autorizada: <code>https://bigfatalbear.github.io</code>).
         </p>
 
@@ -309,7 +313,7 @@
           Compartilhamento por WhatsApp, e-mail, texto copiado ou arquivo CSV.
           Backup manual em JSON ou sincronização automática com o Google Drive.
         </p>
-        <p class="hint">Versão 1.1.1</p>
+        <p class="hint">Versão 1.1.2</p>
       </div>
     </section>
   </main>
