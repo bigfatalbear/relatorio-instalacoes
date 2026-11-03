@@ -50,6 +50,8 @@ Em **Ajustes → Importar planilha**, selecione o `.xlsx`. O app lê todas as ab
 O app entra com a **sua** conta Google e guarda um `relatorio-instalacoes-backup.json` na pasta privada do app no Drive (escopo `drive.appdata`). O arquivo **não aparece** na lista normal do Drive e nenhum outro app consegue lê-lo.
 
 > **Já vem configurado:** o app inclui um Client ID padrão, então o botão *Entrar com Google* funciona direto. Os passos abaixo são só se você quiser usar um projeto próprio (ou se precisar corrigir a origem autorizada).
+>
+> O Client ID fica visível no código do site — **isso é normal e não é uma falha**. Ele é um identificador público; o que protege o app é a lista de **origens JavaScript autorizadas**. O **Client Secret** jamais deve ser colocado no app.
 
 ### Usar seu próprio Client ID (opcional)
 

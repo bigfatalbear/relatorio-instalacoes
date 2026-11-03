@@ -237,30 +237,9 @@
           <span class="hint" id="drive-status">Nenhuma conta conectada.</span>
         </div>
 
-        <div class="field" id="drive-client-field">
-          <div class="field__top">
-            <label for="drive-client">Client ID do Google (OAuth)</label>
-            <button type="button" class="linkbtn" id="btn-drive-paste">Colar</button>
-          </div>
-          <input type="text" id="drive-client" spellcheck="false" autocomplete="off" placeholder="Cole aqui o Client ID (ex.: 123456-abc.apps.googleusercontent.com)">
-        </div>
         <p class="hint">
           O Client ID <strong>já vem configurado</strong> — basta tocar em “Entrar com Google”.
-          Se quiser usar um projeto próprio, cole o seu acima (o texto cinza é só exemplo).
-          A origem autorizada precisa ser exatamente <code>https://bigfatalbear.github.io</code>.
         </p>
-
-        <details class="steps">
-          <summary>Como criar o Client ID (passo a passo)</summary>
-          <ol>
-            <li>Crie um projeto no <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">Google Cloud</a>.</li>
-            <li>Ative a <a href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" rel="noopener">Google Drive API</a>.</li>
-            <li>Configure a <a href="https://console.cloud.google.com/apis/credentials/consent" target="_blank" rel="noopener">tela de consentimento</a> como <strong>Externo</strong> e adicione seu e-mail em <strong>Usuários de teste</strong>.</li>
-            <li>Em <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Credenciais</a>, crie <strong>ID do cliente OAuth → Aplicativo da Web</strong>.</li>
-            <li>Em <strong>Origens JavaScript autorizadas</strong>, adicione <code>https://bigfatalbear.github.io</code> (sem barra no final).</li>
-            <li>Copie o Client ID (termina em <code>.apps.googleusercontent.com</code>) e cole no campo acima.</li>
-          </ol>
-        </details>
 
         <div class="data-actions">
           <button type="button" class="btn btn--primary" id="btn-drive-connect">
@@ -276,6 +255,34 @@
           <input type="checkbox" id="drive-auto">
           <span>Sincronizar automaticamente ao salvar (a cada alteração)</span>
         </label>
+
+        <details class="steps" id="drive-advanced">
+          <summary>Configuração avançada (Client ID)</summary>
+
+          <div class="field" id="drive-client-field">
+            <div class="field__top">
+              <label for="drive-client">Client ID do Google (OAuth)</label>
+              <button type="button" class="linkbtn" id="btn-drive-paste">Colar</button>
+            </div>
+            <input type="text" id="drive-client" spellcheck="false" autocomplete="off" placeholder="Cole aqui o Client ID (ex.: 123456-abc.apps.googleusercontent.com)">
+          </div>
+          <p class="hint">
+            Troque apenas se quiser usar outro projeto do Google. A origem autorizada precisa ser
+            exatamente <code>https://bigfatalbear.github.io</code>.
+          </p>
+
+          <details class="steps steps--nested">
+            <summary>Como criar o Client ID (passo a passo)</summary>
+            <ol>
+              <li>Crie um projeto no <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">Google Cloud</a>.</li>
+              <li>Ative a <a href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" rel="noopener">Google Drive API</a>.</li>
+              <li>Configure a <a href="https://console.cloud.google.com/apis/credentials/consent" target="_blank" rel="noopener">tela de consentimento</a> como <strong>Externo</strong> e adicione seu e-mail em <strong>Usuários de teste</strong>.</li>
+              <li>Em <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Credenciais</a>, crie <strong>ID do cliente OAuth → Aplicativo da Web</strong>.</li>
+              <li>Em <strong>Origens JavaScript autorizadas</strong>, adicione <code>https://bigfatalbear.github.io</code> (sem barra no final).</li>
+              <li>Copie o Client ID (termina em <code>.apps.googleusercontent.com</code>) e cole no campo acima.</li>
+            </ol>
+          </details>
+        </details>
 
         <p class="hint">
           O backup fica na pasta privada do app no Google Drive. Só este app consegue acessá-lo —
@@ -313,7 +320,7 @@
           Compartilhamento por WhatsApp, e-mail, texto copiado ou arquivo CSV.
           Backup manual em JSON ou sincronização automática com o Google Drive.
         </p>
-        <p class="hint">Versão 1.2.0</p>
+        <p class="hint">Versão 1.2.1</p>
       </div>
     </section>
   </main>

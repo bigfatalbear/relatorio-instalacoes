@@ -22,6 +22,8 @@ const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const DRIVE_KEY = 'ri.drive.v1';
 const META_KEY = 'ri.meta.v1';
 const AUTO_SYNC_DELAY = 5000;
+// Client ID público por design (não é segredo). A proteção vem da origem autorizada
+// no Google Cloud; o Client Secret nunca é usado em apps estáticos.
 const DEFAULT_DRIVE_CLIENT_ID = '619731682538-8vk1i4h68fm2uhmsbmjn38l3hgc2isbc.apps.googleusercontent.com';
 
 const state = {

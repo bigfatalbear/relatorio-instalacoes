@@ -303,10 +303,12 @@ tfoot td { font-weight: 700; background: var(--surface-2); }
   border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2);
   padding: 10px 12px; font-size: .86rem;
 }
-.steps summary { cursor: pointer; font-weight: 600; color: var(--brand); }
+.steps summary { cursor: pointer; font-weight: 600; color: var(--brand); user-select: none; }
 .steps summary::marker { color: var(--brand); }
 .steps ol { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 5px; color: var(--muted); }
 .steps a { color: var(--brand); font-weight: 600; }
+.steps > .field { margin-top: 10px; }
+.steps--nested { margin-top: 10px; background: var(--surface); }
 
 code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
