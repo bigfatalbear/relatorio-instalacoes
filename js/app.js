@@ -119,6 +119,7 @@ function cacheElements() {
   els.shareBackup = $('#btn-share-backup');
 
   els.driveClient = $('#drive-client');
+  els.driveClientField = $('#drive-client-field');
   els.driveStatus = $('#drive-status');
   els.driveEmail = $('#drive-email');
   els.driveAuto = $('#drive-auto');
@@ -214,6 +215,13 @@ function bindEvents() {
     saveDriveState();
     if (state.drive.autoSync && !state.drive.linked) {
       toast('Entre com o Google para ativar a sincronização automática.');
+    }
+  });
+  els.driveClient.addEventListener('input', () => {
+    setClientFieldError(false);
+    if (state.driveNotice) {
+      state.driveNotice = '';
+      renderDrive();
     }
   });
 
@@ -819,6 +827,12 @@ function setSyncing(value) {
   renderDrive();
 }
 
+function setClientFieldError(on) {
+  els.driveClientField.classList.toggle('field--error', Boolean(on));
+  if (on) els.driveClient.setAttribute('aria-invalid', 'true');
+  else els.driveClient.removeAttribute('aria-invalid');
+}
+
 async function ensureDriveToken({ clientId, force = false } = {}) {
   if (!force && state.driveToken && state.driveToken.expiresAt > Date.now() + 30000) {
     return state.driveToken;
@@ -839,8 +853,28 @@ async function ensureDriveToken({ clientId, force = false } = {}) {
 
 async function onDriveConnect() {
   if (state.syncing) return;
+
+  const typed = (els.driveClient.value || '').trim();
+  if (!typed) {
+    state.driveNotice = 'Cole o Client ID no campo acima para entrar com o Google.';
+    setClientFieldError(true);
+    els.driveClient.focus();
+    renderDrive();
+    toast('Falta o Client ID do Google. Abra "Como criar o Client ID" e siga os passos.', 5000);
+    return;
+  }
+  if (!/^[\w-]+\.apps\.googleusercontent\.com$/.test(typed)) {
+    state.driveNotice = 'O Client ID não parece válido — ele termina com .apps.googleusercontent.com.';
+    setClientFieldError(true);
+    els.driveClient.focus();
+    renderDrive();
+    toast('Client ID inválido. Confira se copiou o valor completo.', 4500);
+    return;
+  }
+
   setSyncing(true);
   state.driveNotice = '';
+  setClientFieldError(false);
   try {
     const token = await ensureDriveToken({ force: true });
     const info = await getUserInfo(token.accessToken);
